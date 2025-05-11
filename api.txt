@@ -1,0 +1,10 @@
+//  http://localhost:8000/api/v1/user  -- to see all restaurants
+//  http://localhost:8000/api/v1/user/manager -- to see restaurant by manager
+//  http://localhost:8000/api/v1/user/signup -- to sign up a user
+//  http://localhost:8000/api/v1/user/login -- to login a user
+//  http://localhost:8000/api/v1/user/register -- to register a restaurant by manager
+//  http://localhost:8000/api/v1/user/menu -- to add menu item with category by manager
+//  http://localhost:8000/api/v1/user/order -- to place an order by customer
+//  http://localhost:8000/api/v1/user/order/status -- to update order status by manager
+//  http://localhost:8000/api/v1/user/order/customer -- to get customer orders by customer
+//  http://localhost:8000/api/v1/user/order/restaurant -- to get restaurant orders by manager

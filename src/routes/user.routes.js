@@ -2,6 +2,7 @@ import { Router } from "express";
 import {signUp,login} from "../controllers/user.controller.js"
 import { registerRestaurant } from "../controllers/restaurant.controller.js";
 import { getRestaurantByManager,getAllRestaurants,addMenuItemWithCategory,getRestaurantById } from "../controllers/restaurant.controller.js";
+import { addReview, getRestaurantReviews } from "../controllers/review.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { 
     placeOrder,
@@ -22,7 +23,9 @@ router.route("/order").post(verifyJWT,placeOrder)
 router.route("/order/status").put(verifyJWT,updateOrderStatus)
 router.route("/order/customer").get(verifyJWT,getCustomerOrders)
 router.route("/order/restaurant").get(verifyJWT,getRestaurantOrders)
-
+router.route("/:restaurantId/reviews")
+    .post(verifyJWT, addReview)    // Add review
+    .get(getRestaurantReviews);    // Get reviews (public)
 
 export default router
 

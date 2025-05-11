@@ -4,6 +4,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { Restaurant } from "../models/restaurant.model.js";
 import { User } from "../models/user.model.js";
 
+
 const registerRestaurant = asyncHandler(async (req, res) => {
     const {
         name,
@@ -11,46 +12,23 @@ const registerRestaurant = asyncHandler(async (req, res) => {
         openingTime,
         closingTime,
         location,
-        image,
-        managerName,
-        managerEmail,
-        managerPassword
+        image
     } = req.body;
 
-    // Validation
-    if (
-        !name ||
-        !introduction ||
-        !openingTime ||
-        !closingTime ||
-        !location ||
-        !image ||
-        !managerName ||
-        !managerEmail ||
-        !managerPassword
-    ) {
-        throw new ApiError(400, "All fields are required");
-    }
-
     // Check if user is logged in and is a restaurant account
-    if (!req.user) {
-        throw new ApiError(401, "Unauthorized - Please login first");
+    if (!req.user || req.user.accountType !== "restaurant") {
+        throw new ApiError(403, "Only authenticated restaurant accounts can register a restaurant");
     }
 
-    if (req.user.accountType !== "restaurant") {
-        throw new ApiError(403, "Only restaurant accounts can register a restaurant");
+    // Validation
+    if (!name || !introduction || !openingTime || !closingTime || !location || !image) {
+        throw new ApiError(400, "All fields are required");
     }
 
     // Check if this user already has a registered restaurant
     const existingRestaurant = await Restaurant.findOne({ manager: req.user._id });
     if (existingRestaurant) {
         throw new ApiError(409, "You have already registered a restaurant");
-    }
-
-    // Check if restaurant name already exists (optional)
-    const nameExists = await Restaurant.findOne({ name });
-    if (nameExists) {
-        throw new ApiError(409, "Restaurant name already exists");
     }
 
     // Create the restaurant with manager reference
@@ -62,7 +40,7 @@ const registerRestaurant = asyncHandler(async (req, res) => {
         location,
         image,
         manager: req.user._id,
-        managerEmail,
+        managerEmail: req.user.email,
         rating: 0,
         categories: []
     });
@@ -71,15 +49,10 @@ const registerRestaurant = asyncHandler(async (req, res) => {
         throw new ApiError(500, "Failed to register restaurant");
     }
 
-    // Update user's restaurantId and manager details
+    // Update user's restaurantId (no need to update name/email as we're using logged in user's details)
     const user = await User.findByIdAndUpdate(
         req.user._id,
-        {
-            $set: {
-                restaurantId: restaurant._id,
-                fullname: managerName
-            }
-        },
+        { $set: { restaurantId: restaurant._id } },
         { new: true }
     );
 
@@ -88,21 +61,6 @@ const registerRestaurant = asyncHandler(async (req, res) => {
         .json(new ApiResponse(201, restaurant, "Restaurant registered successfully"));
 });
 
-// const getAllRestaurants = asyncHandler(async (req, res) => {
-//     // Optional: Check if user is logged in (but not required)
-//     const isAuthenticated = req.user ? true : false;
-    
-//     // Get all restaurants with basic details
-//     const restaurants = await Restaurant.find({})
-//         .select('name introduction openingTime closingTime location image rating categories');
-    
-//     return res
-//         .status(200)
-//         .json(new ApiResponse(200, { 
-//             restaurants,
-//             isAuthenticated 
-//         }, "Restaurants fetched successfully"));
-// });
 
 const getAllRestaurants = asyncHandler(async (req, res) => {
     // Get all restaurants with basic public details
@@ -307,6 +265,8 @@ const addMenuItemWithCategory = asyncHandler(async (req, res) => {
             restaurantId: restaurant._id
         }, "Menu item and category added successfully"));
 });
+
+// review and rating
 
 
 
