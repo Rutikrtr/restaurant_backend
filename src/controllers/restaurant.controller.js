@@ -38,6 +38,7 @@ const registerRestaurant = asyncHandler(async (req, res) => {
         closingTime,
         location,
         image,
+        approvalStatus: 'pending',
         manager: req.user._id,
         managerEmail: req.user.email,
         rating: 0,
@@ -61,9 +62,10 @@ const registerRestaurant = asyncHandler(async (req, res) => {
     });
 });
 
+// restaurant.controller.js
 const getAllRestaurants = asyncHandler(async (req, res) => {
     const restaurants = await Restaurant.find({})
-        .select('name introduction openingTime closingTime location image rating categories')
+        .select('name introduction openingTime closingTime location image rating categories managerEmail approvalStatus')
         .lean();
 
     return res.status(200).json({
@@ -234,11 +236,53 @@ const addMenuItemWithCategory = asyncHandler(async (req, res) => {
     });
 });
 
+// restaurant.controller.js
+const updateRestaurantApproval = asyncHandler(async (req, res) => {
+    const { status,restaurantId } = req.body;
+
+    // Superadmin verification
+    if (!req.user || req.user.accountType !== 'superadmin') {
+        return res.status(403).json({
+            success: false,
+            message: "Only superadmins can perform this action"
+        });
+    }
+
+    // Validate status
+    if (!['approved', 'rejected'].includes(status)) {
+        return res.status(400).json({
+            success: false,
+            message: "Invalid status provided"
+        });
+    }
+
+    const updatedRestaurant = await Restaurant.findByIdAndUpdate(
+        restaurantId,
+        { approvalStatus: status },
+        { new: true }
+    );
+
+    if (!updatedRestaurant) {
+        return res.status(404).json({
+            success: false,
+            message: "Restaurant not found"
+        });
+    }
+
+    return res.status(200).json({
+        success: true,
+        data: updatedRestaurant,
+        message: `Restaurant ${status} successfully`
+    });
+});
+
+
 export { 
     registerRestaurant,
     getAllRestaurants,
     getRestaurantByManager,
     addMenuItemWithCategory,
     getRestaurantById,
-    getRestaurantDetails
+    getRestaurantDetails,
+    updateRestaurantApproval
 };

@@ -38,4 +38,15 @@ const verifyJWT = asyncHandler(async (req, res, next) => {
     }
 });
 
-export { verifyJWT };
+// auth.middleware.js
+const isSuperadmin = asyncHandler(async (req, res, next) => {
+    if (req.user.accountType !== 'superadmin') {
+        return res.status(403).json({
+            success: false,
+            message: "Superadmin access required"
+        });
+    }
+    next();
+});
+
+export { verifyJWT,isSuperadmin };

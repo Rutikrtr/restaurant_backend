@@ -26,7 +26,7 @@ const userSchema =new  mongoose.Schema({
     accountType:{
         type:String,
        required:true,
-       enum :['customer','restaurant']
+       enum :['customer','restaurant','superadmin']
     }
 
 

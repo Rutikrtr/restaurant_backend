@@ -38,6 +38,11 @@ const restaurantSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
+    approvalStatus: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+    },
     introduction: {
         type: String,
         required: true
