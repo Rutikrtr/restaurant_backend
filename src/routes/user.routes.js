@@ -1,50 +1,72 @@
 import { Router } from "express";
-import {signUp,login} from "../controllers/user.controller.js"
-import { registerRestaurant } from "../controllers/restaurant.controller.js";
-import { getRestaurantByManager,getAllRestaurants,addMenuItemWithCategory,getRestaurantById,updateRestaurantApproval } from "../controllers/restaurant.controller.js";
-import { addReview, getRestaurantReviews } from "../controllers/review.controller.js";
-import { verifyJWT,isSuperadmin } from "../middleware/auth.middleware.js";
-import { checkRestaurantApproval } from "../middleware/restaurant.middleware.js";
+import { signUp, loginSuperadmin, 
+    loginRestaurant, 
+    loginCustomer,logout  } from "../controllers/user.controller.js";
 import { 
-    placeOrder,
-    updateOrderStatus,
-    getCustomerOrders,
-    getRestaurantOrders
-  } from "../controllers/order.controller.js";
-const router=Router()
+  registerRestaurant,
+  getRestaurantByManager,
+  getAllRestaurants,
+  getRestaurantById,
+  updateRestaurantApproval
+} from "../controllers/restaurant.controller.js";
+import { addReview, getRestaurantReviews } from "../controllers/review.controller.js";
+import { verifyJWT, isSuperadmin } from "../middleware/auth.middleware.js";
+import { checkRestaurantApproval } from "../middleware/restaurant.middleware.js";
+import {
+  addMenuItemWithCategory,
+  deleteMenuItem,
+  updateMenuItem,
+  addCategory,
+  deleteCategory
+} from '../controllers/restaurent.menu.controller.js'
+import { 
+  placeOrder,
+  updateOrderStatus,
+  getCustomerOrders,
+  getRestaurantOrders
+} from "../controllers/order.controller.js";
 
-router.route("/signup").post(signUp)
-router.route("/login").post(login)
-router.route("/register").post(verifyJWT,registerRestaurant);
+const router = Router();
+
+
+// ================= AUTHENTICATED ROUTES =================
+// Restaurant Management
+router.route("/register").post(verifyJWT, registerRestaurant);
+router.route("/manager").get(verifyJWT, getRestaurantByManager);
+
+// ================= PUBLIC ROUTES =================
+router.post('/signup', signUp);
+router.post('/login/superadmin', loginSuperadmin);
+router.post('/login/restaurant', loginRestaurant);
+router.post('/login/customer', loginCustomer);
+router.post('/logout',verifyJWT,logout)
 router.route("/").get(getAllRestaurants);
 router.route("/:id").get(getRestaurantById);
-router.route("/manager").get(verifyJWT,getRestaurantByManager);
-router.route("/menu").post(verifyJWT,checkRestaurantApproval,addMenuItemWithCategory)
-router.route("/order").post(verifyJWT,placeOrder)
-router.route("/order/status").put(verifyJWT,checkRestaurantApproval,updateOrderStatus)
-router.route("/order/customer").get(verifyJWT,getCustomerOrders)
-router.route("/order/restaurant").get(verifyJWT,checkRestaurantApproval,getRestaurantOrders)
-router.route("/:restaurantId/reviews")
-    .post(verifyJWT, addReview)    // Add review
-    .get(getRestaurantReviews);    // Get reviews (public)
+router.route("/:restaurantId/reviews").get(getRestaurantReviews);
 
 
+// Menu Management
+router.route("/menu").post(verifyJWT, checkRestaurantApproval, addMenuItemWithCategory);
+router.route("/menu/:menuItemId")
+  .put(verifyJWT, checkRestaurantApproval, updateMenuItem)
+  .delete(verifyJWT, checkRestaurantApproval, deleteMenuItem);
 
-// update restaurant approval
-router.route("/superadmin/approval").put(verifyJWT,isSuperadmin,updateRestaurantApproval)
+router.route("/menu/category")
+  .post(verifyJWT, checkRestaurantApproval, addCategory);
 
 
-export default router
+router.route("/menu/category/:categoryName")
+  .delete(verifyJWT, checkRestaurantApproval, deleteCategory);
+// Order Management
+router.route("/order").post(verifyJWT, placeOrder);
+router.route("/order/status").put(verifyJWT, checkRestaurantApproval, updateOrderStatus);
+router.route("/order/customer").get(verifyJWT, getCustomerOrders);
+router.route("/order/restaurant").get(verifyJWT, checkRestaurantApproval, getRestaurantOrders);
 
+// Reviews (authenticated POST)
+router.route("/:restaurantId/reviews").post(verifyJWT, addReview);
 
+// ================= SUPERADMIN ROUTES =================
+router.route("/superadmin/approval").put(verifyJWT, isSuperadmin, updateRestaurantApproval);
 
-//  http://localhost:8000/api/v1/user  -- to see all restaurants
-//  http://localhost:8000/api/v1/user/manager -- to see restaurant by manager
-//  http://localhost:8000/api/v1/user/signup -- to sign up a user
-//  http://localhost:8000/api/v1/user/login -- to login a user
-//  http://localhost:8000/api/v1/user/register -- to register a restaurant by manager
-//  http://localhost:8000/api/v1/user/menu -- to add menu item with category by manager
-//  http://localhost:8000/api/v1/user/order -- to place an order by customer
-//  http://localhost:8000/api/v1/user/order/status -- to update order status by manager
-//  http://localhost:8000/api/v1/user/order/customer -- to get customer orders by customer
-//  http://localhost:8000/api/v1/user/order/restaurant -- to get restaurant orders by manager
+export default router;

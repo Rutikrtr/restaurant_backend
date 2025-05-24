@@ -76,41 +76,64 @@ const getAllRestaurants = asyncHandler(async (req, res) => {
 });
 
 const getRestaurantByManager = asyncHandler(async (req, res) => {
-    if (!req.user) {
-        return res.status(401).json({
-            success: false,
-            message: "Unauthorized - Please login first"
-        });
-    }
+    try {
+        // 1. Authentication Check
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized - Please login first"
+            });
+        }
 
-    if (req.user.accountType !== "restaurant") {
-        return res.status(403).json({
-            success: false,
-            message: "Only restaurant accounts can access this information"
-        });
-    }
+        // 2. Authorization Check
+        if (req.user.accountType !== "restaurant") {
+            return res.status(403).json({
+                success: false,
+                message: "Only restaurant accounts can access this information"
+            });
+        }
 
-    const restaurant = await Restaurant.findOne({ manager: req.user._id });
-    if (!restaurant) {
-        return res.status(404).json({
-            success: false,
-            message: "No restaurant found for this manager"
-        });
-    }
+        // 3. Find Restaurant with Population
+        const restaurant = await Restaurant.findOne({ manager: req.user._id })
+            .populate('manager', 'fullname email')  // Populate manager details
+            .populate('menu')  // Populate menu items if needed
+            .lean();  // Convert to plain JS object
 
-    const manager = await User.findById(req.user._id).select("-password -refreshToken");
+        if (!restaurant) {
+            return res.status(404).json({
+                success: false,
+                message: "No restaurant found for this manager"
+            });
+        }
 
-    return res.status(200).json({
-        success: true,
-        data: {
-            restaurant,
+        // 4. Transform Response Data
+        const responseData = {
+            _id: restaurant._id,
+            name: restaurant.name,
+            categories: restaurant.categories,
+            menu: restaurant.menu,
+            // Add other necessary fields
             manager: {
-                name: manager.fullname,
-                email: manager.email
+                _id: req.user._id,
+                name: req.user.fullname,
+                email: req.user.email
             }
-        },
-        message: "Restaurant details fetched successfully"
-    });
+        };
+
+        // 5. Send Response
+        return res.status(200).json({
+            success: true,
+            data: responseData,
+            message: "Restaurant details fetched successfully"
+        });
+
+    } catch (error) {
+        console.error("Error in getRestaurantByManager:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error while fetching restaurant data"
+        });
+    }
 });
 
 const getRestaurantDetails = asyncHandler(async (req, res) => {
@@ -185,56 +208,7 @@ const getRestaurantById = asyncHandler(async (req, res) => {
     });
 });
 
-const addMenuItemWithCategory = asyncHandler(async (req, res) => {
-    const { name, description, price, category, image, available = true } = req.body;
 
-    if (!req.user || req.user.accountType !== "restaurant") {
-        return res.status(403).json({
-            success: false,
-            message: "Only restaurant managers can add menu items"
-        });
-    }
-
-    if (!name || !description || !price || !category || !image) {
-        return res.status(400).json({
-            success: false,
-            message: "All fields are required"
-        });
-    }
-
-    if (price <= 0) {
-        return res.status(400).json({
-            success: false,
-            message: "Price must be greater than 0"
-        });
-    }
-
-    const restaurant = await Restaurant.findOne({ manager: req.user._id });
-    if (!restaurant) {
-        return res.status(404).json({
-            success: false,
-            message: "Restaurant not found for this manager"
-        });
-    }
-
-    if (!restaurant.categories.includes(category)) {
-        restaurant.categories.push(category);
-    }
-
-    const newMenuItem = { name, description, price, category, image, available };
-    restaurant.menu.push(newMenuItem);
-    await restaurant.save();
-
-    return res.status(201).json({
-        success: true,
-        data: {
-            categories: restaurant.categories,
-            menuItem: newMenuItem,
-            restaurantId: restaurant._id
-        },
-        message: "Menu item and category added successfully"
-    });
-});
 
 // restaurant.controller.js
 const updateRestaurantApproval = asyncHandler(async (req, res) => {
@@ -281,7 +255,6 @@ export {
     registerRestaurant,
     getAllRestaurants,
     getRestaurantByManager,
-    addMenuItemWithCategory,
     getRestaurantById,
     getRestaurantDetails,
     updateRestaurantApproval

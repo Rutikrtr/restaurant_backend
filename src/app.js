@@ -9,11 +9,11 @@ app.use(cors({
     origin: [
         "http://localhost:3000", // React default
         "http://localhost:5173", // Vite default
-        "http://127.0.0.1:5173"  // Alternative localhost
+        "http://localhost:3001"  // Alternative localhost
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"]
+    allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
 // Configure preflight requests
