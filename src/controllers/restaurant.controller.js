@@ -1,32 +1,69 @@
+import mongoose from "mongoose";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { Restaurant } from "../models/restaurant.model.js";
 import { User } from "../models/user.model.js";
 
 const registerRestaurant = asyncHandler(async (req, res) => {
-    const { name, introduction, openingTime, closingTime, location, image } = req.body;
+    // Extract all required fields from request body
+    const { 
+        email, 
+        password, 
+        accountType, 
+        fullname,
+        name,
+        introduction,
+        openingTime,
+        closingTime,
+        location,
+        image
+    } = req.body;
 
-    // Check if user is logged in and is a restaurant account
-    if (!req.user || req.user.accountType !== "restaurant") {
-        return res.status(403).json({
-            success: false,
-            message: "Only authenticated restaurant accounts can register a restaurant"
-        });
+    // Validate all required fields
+    const requiredFields = [
+        'email', 'password', 'accountType', 'fullname',
+        'name', 'introduction', 'openingTime', 'closingTime', 
+        'location', 'image'
+    ];
+
+    for (const field of requiredFields) {
+        if (!req.body[field]) {
+            return res.status(400).json({
+                success: false,
+                message: `${field} is required`
+            });
+        }
     }
 
-    // Validation
-    if (!name || !introduction || !openingTime || !closingTime || !location || !image) {
+    // Validate account type
+    if (accountType !== "restaurant") {
         return res.status(400).json({
             success: false,
-            message: "All fields are required"
+            message: "Invalid account type - must be 'restaurant'"
         });
     }
 
-    // Check if user already has a restaurant
-    const existingRestaurant = await Restaurant.findOne({ manager: req.user._id });
-    if (existingRestaurant) {
+    // Check for existing user
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
         return res.status(409).json({
             success: false,
-            message: "You have already registered a restaurant"
+            message: "User already exists with this email"
+        });
+    }
+
+    // Create user
+    const user = await User.create({
+        email,
+        password,
+        accountType,
+        fullname,
+        restaurantId: null
+    });
+
+    if (!user) {
+        return res.status(500).json({
+            success: false,
+            message: "Failed to create user account"
         });
     }
 
@@ -38,27 +75,37 @@ const registerRestaurant = asyncHandler(async (req, res) => {
         closingTime,
         location,
         image,
-        approvalStatus: 'pending',
-        manager: req.user._id,
-        managerEmail: req.user.email,
+        approvalStatus: "pending",
+        manager: user._id,
+        managerEmail: user.email,
         rating: 0,
         categories: []
     });
 
     if (!restaurant) {
+        // Rollback user creation if restaurant fails
+        await User.deleteOne({ _id: user._id });
         return res.status(500).json({
             success: false,
-            message: "Failed to register restaurant"
+            message: "Failed to create restaurant"
         });
     }
 
-    // Update user's restaurantId
-    await User.findByIdAndUpdate(req.user._id, { restaurantId: restaurant._id });
+    // Link restaurant to user
+    user.restaurantId = restaurant._id;
+    await user.save();
 
     return res.status(201).json({
         success: true,
-        data: restaurant,
-        message: "Restaurant registered successfully"
+        data: {
+            restaurant,
+            user: {
+                _id: user._id,
+                email: user.email,
+                fullname: user.fullname
+            }
+        },
+        message: "Restaurant registered successfully. Waiting for approval."
     });
 });
 
@@ -211,44 +258,6 @@ const getRestaurantById = asyncHandler(async (req, res) => {
 
 
 // restaurant.controller.js
-const updateRestaurantApproval = asyncHandler(async (req, res) => {
-    const { status,restaurantId } = req.body;
-
-    // Superadmin verification
-    if (!req.user || req.user.accountType !== 'superadmin') {
-        return res.status(403).json({
-            success: false,
-            message: "Only superadmins can perform this action"
-        });
-    }
-
-    // Validate status
-    if (!['approved', 'rejected'].includes(status)) {
-        return res.status(400).json({
-            success: false,
-            message: "Invalid status provided"
-        });
-    }
-
-    const updatedRestaurant = await Restaurant.findByIdAndUpdate(
-        restaurantId,
-        { approvalStatus: status },
-        { new: true }
-    );
-
-    if (!updatedRestaurant) {
-        return res.status(404).json({
-            success: false,
-            message: "Restaurant not found"
-        });
-    }
-
-    return res.status(200).json({
-        success: true,
-        data: updatedRestaurant,
-        message: `Restaurant ${status} successfully`
-    });
-});
 
 
 export { 
@@ -257,5 +266,4 @@ export {
     getRestaurantByManager,
     getRestaurantById,
     getRestaurantDetails,
-    updateRestaurantApproval
 };

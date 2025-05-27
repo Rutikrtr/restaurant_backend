@@ -1,13 +1,11 @@
 import { Router } from "express";
-import { signUp, loginSuperadmin, 
-    loginRestaurant, 
+import { signUp, loginSuperRestaurent,
     loginCustomer,logout  } from "../controllers/user.controller.js";
 import { 
   registerRestaurant,
   getRestaurantByManager,
   getAllRestaurants,
   getRestaurantById,
-  updateRestaurantApproval
 } from "../controllers/restaurant.controller.js";
 import { addReview, getRestaurantReviews } from "../controllers/review.controller.js";
 import { verifyJWT, isSuperadmin } from "../middleware/auth.middleware.js";
@@ -26,18 +24,20 @@ import {
   getRestaurantOrders
 } from "../controllers/order.controller.js";
 
+import { updateRestaurantApproval,pendingRestaurants,changeRestaurantStatus } from "../controllers/superadmin.controller.js";
+
+
 const router = Router();
 
 
 // ================= AUTHENTICATED ROUTES =================
 // Restaurant Management
-router.route("/register").post(verifyJWT, registerRestaurant);
+router.route("/register").post(registerRestaurant);
 router.route("/manager").get(verifyJWT, getRestaurantByManager);
 
 // ================= PUBLIC ROUTES =================
 router.post('/signup', signUp);
-router.post('/login/superadmin', loginSuperadmin);
-router.post('/login/restaurant', loginRestaurant);
+router.post('/login/bothsuperadmin&restaurent', loginSuperRestaurent);
 router.post('/login/customer', loginCustomer);
 router.post('/logout',verifyJWT,logout)
 router.route("/").get(getAllRestaurants);
@@ -68,5 +68,7 @@ router.route("/:restaurantId/reviews").post(verifyJWT, addReview);
 
 // ================= SUPERADMIN ROUTES =================
 router.route("/superadmin/approval").put(verifyJWT, isSuperadmin, updateRestaurantApproval);
+router.route("/superadmin/pending-restaurants").get(verifyJWT, isSuperadmin, pendingRestaurants);
+router.route("/superadmin/changeRestaurantStatus").put(verifyJWT, isSuperadmin, changeRestaurantStatus);
 
 export default router;

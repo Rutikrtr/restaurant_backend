@@ -153,9 +153,148 @@ const signUp = asyncHandler(async (req, res) => {
 // });
 
 
-const loginSuperadmin = asyncHandler(async (req, res) => {
+// const loginSuperadmin = asyncHandler(async (req, res) => {
+//     const { email, password } = req.body;
+
+//     if (!email || !password) {
+//         return res.status(400).json({
+//             success: false,
+//             message: 'Email and password are required'
+//         });
+//     }
+
+//     const user = await User.findOne({ email });
+//     if (!user) {
+//         return res.status(404).json({
+//             success: false,
+//             message: 'User not found'
+//         });
+//     }
+
+//     if (user.accountType !== 'superadmin') {
+//         return res.status(403).json({
+//             success: false,
+//             message: 'Access forbidden for non-superadmin users'
+//         });
+//     }
+
+//     const isPasswordValid = await user.isPasswordCorrect(password);
+//     if (!isPasswordValid) {
+//         return res.status(401).json({
+//             success: false,
+//             message: 'Invalid credentials'
+//         });
+//     }
+
+//     const tokens = await generateAccessAndRefreshToken(user._id);
+//     if (!tokens) {
+//         return res.status(500).json({
+//             success: false,
+//             message: 'Failed to generate tokens'
+//         });
+//     }
+
+//     const [pendingRestaurants, customerData] = await Promise.all([
+//         Restaurant.find({ approvalStatus: 'pending' }),
+//         User.find({ accountType: 'customer' }).select("-password")
+//     ]);
+
+//     const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+//     const options = {
+//         httpOnly: true,
+//         secure: true
+//     };
+
+//     return res
+//         .status(200)
+//         .cookie("accessToken", tokens.accessToken, options)
+//         .cookie("refreshToken", tokens.refreshToken, options)
+//         .json({
+//             success: true,
+//             data: {
+//                 user: loggedInUser,
+//                 accessToken: tokens.accessToken,
+//                 refreshToken: tokens.refreshToken,
+//                 pendingRestaurants,
+//                 customerData
+//             },
+//             message: 'Superadmin logged in successfully'
+//         });
+// });
+
+// // Restaurant Login Controller
+// const loginRestaurant = asyncHandler(async (req, res) => {
+//     const { email, password } = req.body;
+
+//     if (!email || !password) {
+//         return res.status(400).json({
+//             success: false,
+//             message: 'Email and password are required'
+//         });
+//     }
+
+//     const user = await User.findOne({ email });
+//     if (!user) {
+//         return res.status(404).json({
+//             success: false,
+//             message: 'User not found'
+//         });
+//     }
+
+//     if (user.accountType !== 'restaurant') {
+//         return res.status(403).json({
+//             success: false,
+//             message: 'Access forbidden for non-restaurant accounts'
+//         });
+//     }
+
+//     const isPasswordValid = await user.isPasswordCorrect(password);
+//     if (!isPasswordValid) {
+//         return res.status(401).json({
+//             success: false,
+//             message: 'Invalid credentials'
+//         });
+//     }
+
+//     const tokens = await generateAccessAndRefreshToken(user._id);
+//     if (!tokens) {
+//         return res.status(500).json({
+//             success: false,
+//             message: 'Failed to generate tokens'
+//         });
+//     }
+
+//     const restaurantProfile = await Restaurant.findOne({ manager: user._id });
+//     const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+//     const options = {
+//         httpOnly: true,
+//         secure: true
+//     };
+
+//     return res
+//         .status(200)
+//         .cookie("accessToken", tokens.accessToken, options)
+//         .cookie("refreshToken", tokens.refreshToken, options)
+//         .json({
+//             success: true,
+//             data: {
+//                 user: loggedInUser,
+//                 accessToken: tokens.accessToken,
+//                 refreshToken: tokens.refreshToken,
+//                 restaurant: restaurantProfile
+//             },
+//             message: 'Restaurant logged in successfully'
+//         });
+// });
+
+
+
+const loginSuperRestaurent = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
+    // Validate required fields
     if (!email || !password) {
         return res.status(400).json({
             success: false,
@@ -163,6 +302,7 @@ const loginSuperadmin = asyncHandler(async (req, res) => {
         });
     }
 
+    // Find user by email
     const user = await User.findOne({ email });
     if (!user) {
         return res.status(404).json({
@@ -171,21 +311,61 @@ const loginSuperadmin = asyncHandler(async (req, res) => {
         });
     }
 
-    if (user.accountType !== 'superadmin') {
+    // Validate account type
+    if (!['superadmin', 'restaurant'].includes(user.accountType)) {
         return res.status(403).json({
             success: false,
-            message: 'Access forbidden for non-superadmin users'
+            message: 'Access forbidden. Only superadmin and restaurant accounts can login here'
         });
     }
 
+    // Validate password
     const isPasswordValid = await user.isPasswordCorrect(password);
     if (!isPasswordValid) {
         return res.status(401).json({
             success: false,
-            message: 'Invalid credentials'
+            message: 'Invalid Password'
         });
     }
 
+    // Restaurant-specific checks
+    if (user.accountType === 'restaurant') {
+        const restaurantProfile = await Restaurant.findOne({ manager: user._id });
+
+        if (!restaurantProfile) {
+            return res.status(403).json({
+                success: false,
+                message: 'No restaurant profile found for this account'
+            });
+        }
+
+        switch (restaurantProfile.approvalStatus) {
+            case 'pending':
+                return res.status(403).json({
+                    success: false,
+                    message: 'Restaurant approval is pending. Please wait for rutik approval.'
+                });
+            case 'rejected':
+                return res.status(403).json({
+                    success: false,
+                    message: 'Restaurant application rejected. Contact rutik for support.'
+                });
+            case 'stop':
+                return res.status(403).json({
+                    success: false,
+                    message: 'Your Restaurent is temporary Stop... Contact to rutik'
+                });
+            case 'approved':
+                break; // Proceed with login
+            default:
+                return res.status(403).json({
+                    success: false,
+                    message: 'Invalid restaurant status'
+                });
+        }
+    }
+
+    // Generate tokens
     const tokens = await generateAccessAndRefreshToken(user._id);
     if (!tokens) {
         return res.status(500).json({
@@ -194,16 +374,33 @@ const loginSuperadmin = asyncHandler(async (req, res) => {
         });
     }
 
-    const [pendingRestaurants, customerData] = await Promise.all([
-        Restaurant.find({ approvalStatus: 'pending' }),
-        User.find({ accountType: 'customer' }).select("-password")
-    ]);
+    // Prepare response data
+    const loggedInUser = await User.findById(user._id)
+        .select("-password -refreshToken")
+        .lean();
 
-    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+    const responseData = {
+        user: loggedInUser,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken
+    };
 
+    let message = '';
+
+    if (user.accountType === 'restaurant') {
+        const restaurantProfile = await Restaurant.findOne({ manager: user._id }).lean();
+        responseData.restaurant = restaurantProfile;
+        message = 'Restaurant logged in successfully';
+    } else {
+        message = 'Superadmin logged in successfully';
+    }
+
+    // Set cookies
     const options = {
         httpOnly: true,
-        secure: true
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'Strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     };
 
     return res
@@ -212,80 +409,8 @@ const loginSuperadmin = asyncHandler(async (req, res) => {
         .cookie("refreshToken", tokens.refreshToken, options)
         .json({
             success: true,
-            data: {
-                user: loggedInUser,
-                accessToken: tokens.accessToken,
-                refreshToken: tokens.refreshToken,
-                pendingRestaurants,
-                customerData
-            },
-            message: 'Superadmin logged in successfully'
-        });
-});
-
-// Restaurant Login Controller
-const loginRestaurant = asyncHandler(async (req, res) => {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-        return res.status(400).json({
-            success: false,
-            message: 'Email and password are required'
-        });
-    }
-
-    const user = await User.findOne({ email });
-    if (!user) {
-        return res.status(404).json({
-            success: false,
-            message: 'User not found'
-        });
-    }
-
-    if (user.accountType !== 'restaurant') {
-        return res.status(403).json({
-            success: false,
-            message: 'Access forbidden for non-restaurant accounts'
-        });
-    }
-
-    const isPasswordValid = await user.isPasswordCorrect(password);
-    if (!isPasswordValid) {
-        return res.status(401).json({
-            success: false,
-            message: 'Invalid credentials'
-        });
-    }
-
-    const tokens = await generateAccessAndRefreshToken(user._id);
-    if (!tokens) {
-        return res.status(500).json({
-            success: false,
-            message: 'Failed to generate tokens'
-        });
-    }
-
-    const restaurantProfile = await Restaurant.findOne({ manager: user._id });
-    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
-
-    const options = {
-        httpOnly: true,
-        secure: true
-    };
-
-    return res
-        .status(200)
-        .cookie("accessToken", tokens.accessToken, options)
-        .cookie("refreshToken", tokens.refreshToken, options)
-        .json({
-            success: true,
-            data: {
-                user: loggedInUser,
-                accessToken: tokens.accessToken,
-                refreshToken: tokens.refreshToken,
-                restaurant: restaurantProfile
-            },
-            message: 'Restaurant logged in successfully'
+            data: responseData,
+            message: message
         });
 });
 
@@ -388,8 +513,7 @@ const logout = asyncHandler(async (req, res) => {
 
 export { 
     signUp, 
-    loginSuperadmin, 
-    loginRestaurant, 
+   loginSuperRestaurent,
     loginCustomer ,
     logout
 };
