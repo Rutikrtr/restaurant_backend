@@ -26,7 +26,17 @@ const userSchema =new  mongoose.Schema({
         type:String,
        required:true,
        enum :['customer','restaurant','superadmin']
-    }
+    },
+     isEmailVerified: {
+            type: Boolean,
+            default: false
+        },
+        emailVerificationOTP: {
+            type: String
+        },
+        otpExpiry: {
+            type: Date
+        },
 
 
 },{timestamps:true})

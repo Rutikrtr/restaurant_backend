@@ -4,22 +4,21 @@ import cookieParser from "cookie-parser";
 
 const app = express();
 
-
-
+// Enhanced CORS configuration
 app.use(cors({
-    origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps, curl, Postman)
-        if (!origin) return callback(null, true);
-        return callback(null, true); // Reflect the request origin
-    },
+    origin: [
+        "http://localhost:3000", // React default
+        "http://localhost:5173", // Vite default
+        "http://localhost:3001", // Alternative localhost
+    ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
-
 // Configure preflight requests
-app.options("*", cors());
+app.options("*", cors())
+
 
 // Rest of your middleware
 app.use(express.json({ limit: "16kb" }));
@@ -37,3 +36,4 @@ app.use("/api/v1/users", userRouter);
 app.use("/api/v1/user", userRouter)
 
 export { app }
+

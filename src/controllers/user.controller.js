@@ -1,6 +1,63 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { User } from "../models/user.model.js";
 import { Restaurant } from "../models/restaurant.model.js";
+import nodemailer from "nodemailer";
+import crypto from "crypto";
+
+// Email configuration
+const createTransporter = () => {
+    return nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+            user: 'feastnation6972@gmail.com',
+            pass: 'snhe lrbq wczc qubl'
+        }
+    });
+};
+
+// Generate OTP
+const generateOTP = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+// Send OTP email
+const sendOTPEmail = async (email, otp, fullname) => {
+    try {
+        const transporter = createTransporter();
+        
+        const mailOptions = {
+            from: 'feastnation6972@gmail.com',
+            to: email,
+            subject: 'Email Verification - FeastNation',
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #2c3e50;">Email Verification Required</h2>
+                    <p>Dear ${fullname},</p>
+                    <p>To complete your registration, please verify your email address using the OTP below:</p>
+                    
+                    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; text-align: center; margin: 20px 0;">
+                        <h1 style="color: #007bff; font-size: 36px; margin: 0; letter-spacing: 5px;">${otp}</h1>
+                        <p style="color: #666; margin: 10px 0 0 0;">This OTP will expire in 10 minutes</p>
+                    </div>
+                    
+                    <p>If you didn't request this verification, please ignore this email.</p>
+                    
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+                    <p style="color: #666; font-size: 12px;">
+                        This is an automated email. Please do not reply to this message.<br>
+                        © 2024 FeastNation. All rights reserved.
+                    </p>
+                </div>
+            `
+        };
+
+        await transporter.sendMail(mailOptions);
+        return true;
+    } catch (error) {
+        console.error('Error sending OTP email:', error);
+        return false;
+    }
+};
 
 const generateAccessAndRefreshToken = async (userId) => {
     try {
@@ -17,6 +74,7 @@ const generateAccessAndRefreshToken = async (userId) => {
     }
 }
 
+// Step 1: Initial signup - Send OTP
 const signUp = asyncHandler(async (req, res) => {
     const { fullname, email, password, accountType } = req.body;
 
@@ -44,253 +102,164 @@ const signUp = asyncHandler(async (req, res) => {
         });
     }
 
-    // Create user
-    const user = await User.create({
+    // Generate and send OTP
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Store user data temporarily with OTP
+    const tempUser = await User.create({
         fullname,
         email,
         password,
-        accountType
+        accountType,
+        isEmailVerified: false,
+        emailVerificationOTP: otp,
+        otpExpiry: otpExpiry
     });
 
-    if (!user) {
+    if (!tempUser) {
         return res.status(500).json({
             success: false,
             message: 'Failed to create user'
         });
     }
 
-    // Return response without sensitive data
-    const createdUser = await User.findById(user._id).select("-password -refreshToken");
+    // Send OTP email
+    const emailSent = await sendOTPEmail(email, otp, fullname);
+    
+    if (!emailSent) {
+        // Clean up if email sending fails
+        await User.deleteOne({ _id: tempUser._id });
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to send verification email. Please try again.'
+        });
+    }
 
     return res.status(201).json({
         success: true,
-        data: createdUser,
-        message: 'User registered successfully'
+        data: {
+            userId: tempUser._id,
+            email: email,
+            message: 'OTP sent to your email. Please verify to complete registration.'
+        },
+        message: 'Verification OTP sent to your email'
     });
 });
 
+// Step 2: Verify OTP and complete registration
+const verifyEmailOTP = asyncHandler(async (req, res) => {
+    const { userId, otp } = req.body;
 
+    if (!userId || !otp) {
+        return res.status(400).json({
+            success: false,
+            message: 'User ID and OTP are required'
+        });
+    }
 
-// const login = asyncHandler(async (req, res) => {
-//     const { email, password } = req.body;
+    // Find user with matching OTP
+    const user = await User.findById(userId);
+    
+    if (!user) {
+        return res.status(404).json({
+            success: false,
+            message: 'User not found'
+        });
+    }
 
-//     if (!email || !password) {
-//         return res.status(400).json({
-//             success: false,
-//             message: 'Email and password are required'
-//         });
-//     }
+    // Check if already verified
+    if (user.isEmailVerified) {
+        return res.status(400).json({
+            success: false,
+            message: 'Email already verified'
+        });
+    }
 
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//         return res.status(404).json({
-//             success: false,
-//             message: 'User not found'
-//         });
-//     }
+    // Check OTP validity
+    if (user.emailVerificationOTP !== otp) {
+        return res.status(400).json({
+            success: false,
+            message: 'Invalid OTP'
+        });
+    }
 
-//     const isPasswordValid = await user.isPasswordCorrect(password);
-//     if (!isPasswordValid) {
-//         return res.status(401).json({
-//             success: false,
-//             message: 'Invalid credentials'
-//         });
-//     }
+    // Check OTP expiry
+    if (new Date() > user.otpExpiry) {
+        return res.status(400).json({
+            success: false,
+            message: 'OTP has expired. Please request a new one.'
+        });
+    }
 
-//     const tokens = await generateAccessAndRefreshToken(user._id);
-//     if (!tokens) {
-//         return res.status(500).json({
-//             success: false,
-//             message: 'Failed to generate tokens'
-//         });
-//     }
+    // Verify email and clear OTP fields
+    user.isEmailVerified = true;
+    user.emailVerificationOTP = undefined;
+    user.otpExpiry = undefined;
+    await user.save();
 
-//     const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+    // Return response without sensitive data
+    const verifiedUser = await User.findById(user._id).select("-password -refreshToken -emailVerificationOTP");
 
-//     let responseData = {
-//         user: loggedInUser,
-//         accessToken: tokens.accessToken,
-//         refreshToken: tokens.refreshToken
-//     };
+    return res.status(200).json({
+        success: true,
+        data: verifiedUser,
+        message: 'Email verified successfully. Registration completed!'
+    });
+});
 
-//     // Fetch data from User collection based on accountType
-//     // auth.controller.js (login controller update)
-//     if (loggedInUser.accountType === 'superadmin') {
-//         try {
-//             const [pendingRestaurants, customerData] = await Promise.all([
-//                 Restaurant.find({ approvalStatus: 'pending' }),
-//                 User.find({ accountType: 'customer' }).select("-password")
-//             ]);
+// Resend OTP
+const resendOTP = asyncHandler(async (req, res) => {
+    const { userId } = req.body;
 
-//             responseData = {
-//                 ...responseData,
-//                 pendingRestaurants,
-//                 customerData
-//             };
-//         } catch (error) {
-//             console.error("Error fetching superadmin data:", error);
-//             return res.status(500).json({
-//                 success: false,
-//                 message: 'Error fetching superadmin data'
-//             });
-//         }
-//     }
+    if (!userId) {
+        return res.status(400).json({
+            success: false,
+            message: 'User ID is required'
+        });
+    }
 
-//     const options = {
-//         httpOnly: true,
-//         secure: true
-//     };
+    const user = await User.findById(userId);
+    
+    if (!user) {
+        return res.status(404).json({
+            success: false,
+            message: 'User not found'
+        });
+    }
 
-//     return res
-//         .status(200)
-//         .cookie("accessToken", tokens.accessToken, options)
-//         .cookie("refreshToken", tokens.refreshToken, options)
-//         .json({
-//             success: true,
-//             data: responseData,
-//             message: 'User logged in successfully'
-//         });
-// });
+    if (user.isEmailVerified) {
+        return res.status(400).json({
+            success: false,
+            message: 'Email already verified'
+        });
+    }
 
+    // Generate new OTP
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-// const loginSuperadmin = asyncHandler(async (req, res) => {
-//     const { email, password } = req.body;
+    user.emailVerificationOTP = otp;
+    user.otpExpiry = otpExpiry;
+    await user.save();
 
-//     if (!email || !password) {
-//         return res.status(400).json({
-//             success: false,
-//             message: 'Email and password are required'
-//         });
-//     }
+    // Send new OTP
+    const emailSent = await sendOTPEmail(user.email, otp, user.fullname);
+    
+    if (!emailSent) {
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to send verification email. Please try again.'
+        });
+    }
 
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//         return res.status(404).json({
-//             success: false,
-//             message: 'User not found'
-//         });
-//     }
+    return res.status(200).json({
+        success: true,
+        message: 'New OTP sent to your email'
+    });
+});
 
-//     if (user.accountType !== 'superadmin') {
-//         return res.status(403).json({
-//             success: false,
-//             message: 'Access forbidden for non-superadmin users'
-//         });
-//     }
-
-//     const isPasswordValid = await user.isPasswordCorrect(password);
-//     if (!isPasswordValid) {
-//         return res.status(401).json({
-//             success: false,
-//             message: 'Invalid credentials'
-//         });
-//     }
-
-//     const tokens = await generateAccessAndRefreshToken(user._id);
-//     if (!tokens) {
-//         return res.status(500).json({
-//             success: false,
-//             message: 'Failed to generate tokens'
-//         });
-//     }
-
-//     const [pendingRestaurants, customerData] = await Promise.all([
-//         Restaurant.find({ approvalStatus: 'pending' }),
-//         User.find({ accountType: 'customer' }).select("-password")
-//     ]);
-
-//     const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
-
-//     const options = {
-//         httpOnly: true,
-//         secure: true
-//     };
-
-//     return res
-//         .status(200)
-//         .cookie("accessToken", tokens.accessToken, options)
-//         .cookie("refreshToken", tokens.refreshToken, options)
-//         .json({
-//             success: true,
-//             data: {
-//                 user: loggedInUser,
-//                 accessToken: tokens.accessToken,
-//                 refreshToken: tokens.refreshToken,
-//                 pendingRestaurants,
-//                 customerData
-//             },
-//             message: 'Superadmin logged in successfully'
-//         });
-// });
-
-// // Restaurant Login Controller
-// const loginRestaurant = asyncHandler(async (req, res) => {
-//     const { email, password } = req.body;
-
-//     if (!email || !password) {
-//         return res.status(400).json({
-//             success: false,
-//             message: 'Email and password are required'
-//         });
-//     }
-
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//         return res.status(404).json({
-//             success: false,
-//             message: 'User not found'
-//         });
-//     }
-
-//     if (user.accountType !== 'restaurant') {
-//         return res.status(403).json({
-//             success: false,
-//             message: 'Access forbidden for non-restaurant accounts'
-//         });
-//     }
-
-//     const isPasswordValid = await user.isPasswordCorrect(password);
-//     if (!isPasswordValid) {
-//         return res.status(401).json({
-//             success: false,
-//             message: 'Invalid credentials'
-//         });
-//     }
-
-//     const tokens = await generateAccessAndRefreshToken(user._id);
-//     if (!tokens) {
-//         return res.status(500).json({
-//             success: false,
-//             message: 'Failed to generate tokens'
-//         });
-//     }
-
-//     const restaurantProfile = await Restaurant.findOne({ manager: user._id });
-//     const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
-
-//     const options = {
-//         httpOnly: true,
-//         secure: true
-//     };
-
-//     return res
-//         .status(200)
-//         .cookie("accessToken", tokens.accessToken, options)
-//         .cookie("refreshToken", tokens.refreshToken, options)
-//         .json({
-//             success: true,
-//             data: {
-//                 user: loggedInUser,
-//                 accessToken: tokens.accessToken,
-//                 refreshToken: tokens.refreshToken,
-//                 restaurant: restaurantProfile
-//             },
-//             message: 'Restaurant logged in successfully'
-//         });
-// });
-
-
-
+// Modified login functions to check email verification
 const loginSuperRestaurent = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
@@ -308,6 +277,16 @@ const loginSuperRestaurent = asyncHandler(async (req, res) => {
         return res.status(404).json({
             success: false,
             message: 'User not found'
+        });
+    }
+
+    // Check if email is verified
+    if (!user.isEmailVerified) {
+        return res.status(403).json({
+            success: false,
+            message: 'Please verify your email before logging in',
+            requiresVerification: true,
+            userId: user._id
         });
     }
 
@@ -343,17 +322,17 @@ const loginSuperRestaurent = asyncHandler(async (req, res) => {
             case 'pending':
                 return res.status(403).json({
                     success: false,
-                    message: 'Restaurant approval is pending. Please wait for rutik approval.'
+                    message: 'Restaurant approval is pending. Please wait for admin approval.'
                 });
             case 'rejected':
                 return res.status(403).json({
                     success: false,
-                    message: 'Restaurant application rejected. Contact rutik for support.'
+                    message: 'Restaurant application rejected. Contact admin for support.'
                 });
             case 'stop':
                 return res.status(403).json({
                     success: false,
-                    message: 'Your Restaurent is temporary Stop... Contact to rutik'
+                    message: 'Your Restaurant is temporarily stopped... Contact admin'
                 });
             case 'approved':
                 break; // Proceed with login
@@ -376,7 +355,7 @@ const loginSuperRestaurent = asyncHandler(async (req, res) => {
 
     // Prepare response data
     const loggedInUser = await User.findById(user._id)
-        .select("-password -refreshToken")
+        .select("-password -refreshToken -emailVerificationOTP")
         .lean();
 
     const responseData = {
@@ -414,7 +393,7 @@ const loginSuperRestaurent = asyncHandler(async (req, res) => {
         });
 });
 
-// Customer Login Controller
+// Customer Login Controller with email verification check
 const loginCustomer = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
@@ -430,6 +409,16 @@ const loginCustomer = asyncHandler(async (req, res) => {
         return res.status(404).json({
             success: false,
             message: 'User not found'
+        });
+    }
+
+    // Check if email is verified
+    if (!user.isEmailVerified) {
+        return res.status(403).json({
+            success: false,
+            message: 'Please verify your email before logging in',
+            requiresVerification: true,
+            userId: user._id
         });
     }
 
@@ -456,7 +445,7 @@ const loginCustomer = asyncHandler(async (req, res) => {
         });
     }
 
-    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken -emailVerificationOTP");
 
     const options = {
         httpOnly: true,
@@ -509,11 +498,11 @@ const logout = asyncHandler(async (req, res) => {
         });
 });
 
-
-
 export { 
     signUp, 
-   loginSuperRestaurent,
-    loginCustomer ,
+    verifyEmailOTP,
+    resendOTP,
+    loginSuperRestaurent,
+    loginCustomer,
     logout
 };
